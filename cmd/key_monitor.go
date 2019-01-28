@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strconv"
 
 	"go.etcd.io/etcd/clientv3"
 
@@ -38,12 +39,10 @@ var (
 	watchWatchesPerStream int
 	watchedKeyTotal       int
 
-	watchPutRate  int
-	watchPutTotal int
+	watchPutRate int
 
 	watchKeySize      int
 	watchKeySpaceSize int
-	watchSeqKeys      bool
 )
 
 type watchedKeys struct {
@@ -61,10 +60,9 @@ func init() {
 	RootCmd.AddCommand(watchCmd)
 	watchCmd.Flags().IntVar(&watchStreams, "streams", 10, "Total watch streams")
 	watchCmd.Flags().IntVar(&watchWatchesPerStream, "watch-per-stream", 100, "Total watchers per stream")
-	watchCmd.Flags().IntVar(&watchedKeyTotal, "watched-key-total", 10, "Total number of keys to be watched")
+	watchCmd.Flags().IntVar(&watchedKeyTotal, "watched-key-total", 100, "Total number of keys to be watched")
 
 	watchCmd.Flags().IntVar(&watchPutRate, "put-rate", 5, "Number of keys to put per second")
-	watchCmd.Flags().IntVar(&watchPutTotal, "put-total", 1000, "Number of put requests")
 
 	watchCmd.Flags().IntVar(&watchKeySize, "key-size", 32, "Key size of watch request")
 	watchCmd.Flags().IntVar(&watchKeySpaceSize, "key-space-size", 1, "Maximum possible keys")
@@ -87,6 +85,22 @@ func watchFunc(cmd *cobra.Command, args []string) {
 	wk := newWatchedKeys()
 	benchMakeWatches(clients, wk)
 	benchPutWatches(clients, wk)
+}
+
+func newWatchedKeys() *watchedKeys {
+	watched := make([]string, watchedKeyTotal)
+	for i := range watched {
+		k := make([]byte, watchKeySize)
+		binary.PutVarint(k, int64(rand.Intn(watchKeySpaceSize)))
+		watched[i] = string(k)
+	}
+	ctx, cancel := context.WithCancel(context.TODO())
+	return &watchedKeys{
+		watched:     watched,
+		numWatchers: make(map[string]int),
+		ctx:         ctx,
+		cancel:      cancel,
+	}
 }
 
 func benchMakeWatches(clients []*clientv3.Client, wk *watchedKeys) {
@@ -136,62 +150,24 @@ func benchMakeWatches(clients []*clientv3.Client, wk *watchedKeys) {
 	}
 }
 
-func newWatchedKeys() *watchedKeys {
-	watched := make([]string, watchedKeyTotal)
-	for i := range watched {
-		k := make([]byte, watchKeySize)
-		if watchSeqKeys {
-			binary.PutVarint(k, int64(i%watchKeySpaceSize))
-		} else {
-			binary.PutVarint(k, int64(rand.Intn(watchKeySpaceSize)))
-		}
-		watched[i] = string(k)
-	}
-	ctx, cancel := context.WithCancel(context.TODO())
-	return &watchedKeys{
-		watched:     watched,
-		numWatchers: make(map[string]int),
-		ctx:         ctx,
-		cancel:      cancel,
-	}
-}
-
 func benchPutWatches(clients []*clientv3.Client, wk *watchedKeys) {
-	eventsTotal := 0
-	for i := 0; i < watchPutTotal; i++ {
-		eventsTotal += wk.numWatchers[wk.watched[i%len(wk.watched)]]
-	}
 
 	println("PutKey")
-	bar = pb.New(eventsTotal)
-	bar.Format("Bom !")
-	bar.Start()
-
-	wg.Add(len(wk.watches))
-
-	putreqc := make(chan clientv3.Op, len(clients))
-	go func() {
-		defer close(putreqc)
-		for i := 0; i < watchPutTotal; i++ {
-			putreqc <- clientv3.OpPut(wk.watched[i%(len(wk.watched))], "data")
-		}
-	}()
+	println(strconv.Itoa(watchPutRate) + " per second.")
 
 	limit := rate.NewLimiter(rate.Limit(watchPutRate), 1)
+	wg.Add(1)
 	for _, cc := range clients {
 		go func(c *clientv3.Client) {
-			for op := range putreqc {
+			for i := 0; ; i++ {
 				if err := limit.Wait(context.TODO()); err != nil {
 					panic(err)
 				}
-				if _, err := c.Do(context.TODO(), op); err != nil {
+				if _, err := c.Do(context.TODO(), clientv3.OpPut(wk.watched[i%(len(wk.watched))], "data")); err != nil {
 					panic(err)
 				}
-				bar.Increment()
 			}
 		}(cc)
 	}
-
 	wg.Wait()
-	bar.Finish()
 }
