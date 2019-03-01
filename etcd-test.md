@@ -221,9 +221,9 @@ create watcher
 watch result is about same as in 10 watcher per key. so etcd are able support large number of watchers, and number of watcher does not affect the performance of notify.
 ```
 
-### test with toxiproxy
+## test with toxiproxy
 
-#### toxiproxy setup
+### toxiproxy setup
 
 toxiproxy is a tool that can let you control network parameters like latency, bandwidth,jitter etc. do take note that the parameters (toxic in toxiproxy) is per connection. so in our test using toxiproxy, we need to change the connection(--conns) to 1.
 
@@ -241,7 +241,7 @@ toxiproxy is a tool that can let you control network parameters like latency, ba
 
 we will have the proxy forward localhost:2379 to 10.22.51.37:2379 . the test follows are all using single endpiont localhost:2379
 
-#### test with added latency
+### test with added latency
 
 command to change latency is
 
@@ -277,7 +277,7 @@ to read 10 keys with 1000 client
 
 we can see that latency affects the performance great request.
 
-#### test with limited bandwidth
+### test with limited bandwidth
 
 command to limit bandwidth is
 
@@ -313,7 +313,7 @@ read 10 keys with 1000 client
 
 ```
 
-#### test with limited bandwidth and high latency
+### test with limited bandwidth and high latency
 
 this is tested with 1MB bandwidth and 500ms latency
 
