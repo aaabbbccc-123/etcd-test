@@ -7,7 +7,7 @@
 
 ## test env
 
-* etcd cluster: 5 node, bandwidth between node 100MB. latency between node about 10M.
+* etcd cluster: 5 node, bandwidth between node 100MB. latency between node about 10ms or less.
 * test machine: 1 vm. latency to the node are : 10ms, 10ms, 0.2ms, 8ms, 8ms
 
 ## system capacity test result
